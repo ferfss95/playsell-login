@@ -36,14 +36,44 @@ npm install
 
 ## Configuração
 
-Crie um arquivo `.env` na raiz do projeto com as seguintes variáveis:
+⚠️ **IMPORTANTE**: Configure as variáveis de ambiente antes de executar a aplicação!
+
+### Passo 1: Criar arquivo `.env`
+
+Copie o arquivo `.env.example` para `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Ou crie manualmente um arquivo `.env` na raiz do projeto com as seguintes variáveis:
 
 ```env
-VITE_SUPABASE_URL=sua_url_do_supabase
+VITE_SUPABASE_URL=https://seu-projeto.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=sua_chave_publica
 # ou
 VITE_SUPABASE_ANON_KEY=sua_chave_anonima
 ```
+
+### Passo 2: Obter credenciais do Supabase
+
+1. Acesse o [Supabase Dashboard](https://app.supabase.com)
+2. Selecione seu projeto
+3. Vá em **Settings** → **API**
+4. Copie:
+   - **Project URL** → `VITE_SUPABASE_URL`
+   - **anon/public key** → `VITE_SUPABASE_PUBLISHABLE_KEY` ou `VITE_SUPABASE_ANON_KEY`
+
+### Passo 3: Reiniciar o servidor
+
+Após criar/editar o arquivo `.env`, **reinicie o servidor**:
+
+```bash
+# Pare o servidor (Ctrl+C) e inicie novamente:
+npm run dev
+```
+
+⚠️ **Nota**: O servidor precisa ser reiniciado para carregar as variáveis de ambiente!
 
 ## Execução
 
@@ -72,4 +102,5 @@ Após o login bem-sucedido, o usuário é redirecionado automaticamente para:
 - Supabase (autenticação)
 - Sonner (toast notifications)
 - Lucide React (ícones)
+
 

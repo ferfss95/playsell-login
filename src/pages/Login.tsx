@@ -14,7 +14,7 @@ import type { UserRole } from "@/types";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido").min(1, "Email é obrigatório"),
-  senha: z.string().min(6, "Senha deve ter no mínimo 6 caracteres"),
+  senha: z.string().min(1, "Senha ou matrícula é obrigatória"), // Removido mínimo de 6 para permitir matrícula
 });
 
 type LoginFormData = z.infer<typeof loginSchema>;
@@ -44,6 +44,13 @@ export default function Login() {
 
       if (!response.role) {
         toast.error("Perfil não encontrado");
+        return;
+      }
+
+      // Se for primeiro acesso (senha = matrícula), redirecionar para redefinição obrigatória
+      if (response.requiresPasswordReset) {
+        toast.info("Primeiro acesso detectado. Redefina sua senha para continuar.");
+        navigate("/reset-password?first_access=true");
         return;
       }
 
@@ -95,13 +102,13 @@ export default function Login() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="senha">Senha</Label>
+              <Label htmlFor="senha">Senha / Matrícula</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="senha"
                   type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
+                  placeholder="Digite sua matrícula ou senha"
                   className="pl-10 pr-10"
                   {...register("senha")}
                   disabled={isLoading}
@@ -153,4 +160,5 @@ export default function Login() {
     </div>
   );
 }
+
 

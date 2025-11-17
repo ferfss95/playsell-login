@@ -3,13 +3,16 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Lock, Eye, EyeOff, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Lock, Eye, EyeOff, Loader2, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { redefinirSenha } from "@/services/auth";
+import { redefinirSenha, getRedirectUrl } from "@/services/auth";
+import { supabase } from "@/lib/supabase";
+import type { UserRole } from "@/types";
+import { validarPerfil } from "@/services/auth";
 
 const resetPasswordSchema = z
   .object({
@@ -30,6 +33,7 @@ export default function ResetPassword() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [passwordReset, setPasswordReset] = useState(false);
+  const [isFirstAccess, setIsFirstAccess] = useState(false);
 
   const {
     register,
@@ -40,20 +44,66 @@ export default function ResetPassword() {
   });
 
   useEffect(() => {
-    // Verificar se há token de redefinição na URL
+    // Verificar se é primeiro acesso (sem token) ou reset normal (com token)
     const accessToken = searchParams.get("access_token");
-    if (!accessToken) {
+    const firstAccess = searchParams.get("first_access") === "true";
+    
+    setIsFirstAccess(firstAccess);
+    
+    // Se não for primeiro acesso e não tiver token, é link inválido
+    if (!firstAccess && !accessToken) {
       toast.error("Link inválido ou expirado");
       // Redirecionar para login após 2 segundos
       setTimeout(() => {
         navigate("/");
       }, 2000);
     }
+    
+    // Se for primeiro acesso, verificar se está autenticado
+    if (firstAccess && supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (!session) {
+          toast.error("Sessão expirada. Faça login novamente.");
+          navigate("/");
+        }
+      });
+    }
   }, [searchParams, navigate]);
 
   const onSubmit = async (data: ResetPasswordFormData) => {
     setIsLoading(true);
     try {
+      // Verificar se a nova senha é diferente da matrícula (se for primeiro acesso)
+      if (isFirstAccess && supabase) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // Buscar matrícula do usuário
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('enrollment_number')
+            .eq('id', user.id)
+            .maybeSingle();
+          
+          // Se a nova senha for igual à matrícula (case-insensitive), não permitir
+          // Também verificar a versão preenchida da matrícula (para matrículas < 6 caracteres)
+          if (profile && profile.enrollment_number) {
+            // Converter para string primeiro, pois pode vir como número do banco
+            const enrollmentNumber = String(profile.enrollment_number).trim();
+            const enrollmentPadded = enrollmentNumber.length < 6 ? enrollmentNumber.padStart(6, '0') : enrollmentNumber;
+            const novaSenhaNormalized = data.senha.trim().toLowerCase();
+            
+            const enrollmentMatch = novaSenhaNormalized === enrollmentNumber.toLowerCase() || 
+                                   novaSenhaNormalized === enrollmentPadded.toLowerCase();
+            
+            if (enrollmentMatch) {
+              toast.error("A nova senha não pode ser igual à sua matrícula. Escolha uma senha diferente.");
+              setIsLoading(false);
+              return;
+            }
+          }
+        }
+      }
+
       const response = await redefinirSenha(data.senha);
 
       if (!response.success) {
@@ -64,7 +114,22 @@ export default function ResetPassword() {
       setPasswordReset(true);
       toast.success(response.message || "Senha redefinida com sucesso!");
 
-      // Redirecionar para login após 3 segundos
+      // Se for primeiro acesso, redirecionar para a aplicação baseada no role
+      if (isFirstAccess && supabase) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const role = await validarPerfil(user.id);
+          if (role) {
+            setTimeout(() => {
+              const redirectUrl = getRedirectUrl(role);
+              window.location.href = redirectUrl;
+            }, 2000);
+            return;
+          }
+        }
+      }
+
+      // Se não for primeiro acesso ou não conseguir obter role, redirecionar para login
       setTimeout(() => {
         navigate("/");
       }, 3000);
@@ -115,10 +180,25 @@ export default function ResetPassword() {
           <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-gradient-primary flex items-center justify-center shadow-glow">
             <Lock className="h-8 w-8 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl font-bold">Redefinir Senha</CardTitle>
+          <CardTitle className="text-2xl font-bold">
+            {isFirstAccess ? "Definir Nova Senha" : "Redefinir Senha"}
+          </CardTitle>
           <CardDescription className="text-base">
-            Digite sua nova senha
+            {isFirstAccess 
+              ? "Este é seu primeiro acesso. Defina uma senha pessoal para continuar."
+              : "Digite sua nova senha"
+            }
           </CardDescription>
+          {isFirstAccess && (
+            <div className="mt-2 p-3 bg-info/10 border border-info/20 rounded-md">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 text-info mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-info">
+                  <strong>Importante:</strong> Escolha uma senha segura que seja diferente da sua matrícula.
+                </div>
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -212,4 +292,5 @@ export default function ResetPassword() {
     </div>
   );
 }
+
 
